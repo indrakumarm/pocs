@@ -9,3 +9,7 @@ def read_root():
 @app.get("/hello")
 def hello(name: str = "User"):
     return {"message": f"Hello {name}, Railway deployed your app successfully!"}
+
+@app.get("/check")
+def hello(name: str = "User"):
+    return {"message": f"Hello {name}, Railway updated your app successfully!"}
