@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+import boto3
 
 app = FastAPI()
 s3 = boto3.client(
