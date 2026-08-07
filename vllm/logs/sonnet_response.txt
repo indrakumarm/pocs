@@ -1,0 +1,49 @@
+ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-07-06 10:03:02,870 - airflow_failure_analysis.callback - INFO - 📊 FAILURE ANALYSIS RESULTS
+2026-07-06 10:03:02,870 - airflow_failure_analysis.callback - INFO - 📊 FAILURE ANALYSIS RESULTS
+2026-07-06 10:03:02,870 - airflow_failure_analysis.callback - INFO - ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-07-06 10:03:02,870 - airflow_failure_analysis.callback - INFO - ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-07-06 10:03:02,870 - airflow_failure_analysis.callback - INFO - 
+2026-07-06 10:03:02,870 - airflow_failure_analysis.callback - INFO - 
+2026-07-06 10:03:02,870 - airflow_failure_analysis.callback - INFO - 🔴 Error Type: AirflowFailException
+2026-07-06 10:03:02,870 - airflow_failure_analysis.callback - INFO - 🔴 Error Type: AirflowFailException
+2026-07-06 10:03:02,870 - airflow_failure_analysis.callback - INFO - 
+2026-07-06 10:03:02,870 - airflow_failure_analysis.callback - INFO - 
+2026-07-06 10:03:02,870 - airflow_failure_analysis.callback - INFO - 🎯 Root Cause:
+2026-07-06 10:03:02,870 - airflow_failure_analysis.callback - INFO - 🎯 Root Cause:
+2026-07-06 10:03:02,870 - airflow_failure_analysis.callback - INFO -    Data validation check failed in repair_and_check_data function at line 78 of ATMS_load_opensearch.py - required data for date 2026-06-28 is not available, causing an intentional AirflowFailException to be raised
+2026-07-06 10:03:02,870 - airflow_failure_analysis.callback - INFO -    Data validation check failed in repair_and_check_data function at line 78 of ATMS_load_opensearch.py - required data for date 2026-06-28 is not available, causing an intentional AirflowFailException to be raised
+2026-07-06 10:03:02,870 - airflow_failure_analysis.callback - INFO - 
+2026-07-06 10:03:02,870 - airflow_failure_analysis.callback - INFO - 
+2026-07-06 10:03:02,870 - airflow_failure_analysis.callback - INFO - 💡 Fix Suggestions:
+2026-07-06 10:03:02,870 - airflow_failure_analysis.callback - INFO - 💡 Fix Suggestions:
+2026-07-06 10:03:02,870 - airflow_failure_analysis.callback - INFO -    1. Check if the data source for date 2026-06-28 exists and is accessible - verify upstream data pipelines or external data feeds
+2026-07-06 10:03:02,870 - airflow_failure_analysis.callback - INFO -    1. Check if the data source for date 2026-06-28 exists and is accessible - verify upstream data pipelines or external data feeds
+2026-07-06 10:03:02,870 - airflow_failure_analysis.callback - INFO -    2. Review the data availability logic in repair_and_check_data function to ensure the date calculation is correct (scheduled date 2026-07-04 vs expected data date 2026-06-28)
+2026-07-06 10:03:02,870 - airflow_failure_analysis.callback - INFO -    2. Review the data availability logic in repair_and_check_data function to ensure the date calculation is correct (scheduled date 2026-07-04 vs expected data date 2026-06-28)
+2026-07-06 10:03:02,870 - airflow_failure_analysis.callback - INFO -    3. Add upstream task dependencies or sensors to wait for required data before running this task
+2026-07-06 10:03:02,870 - airflow_failure_analysis.callback - INFO -    3. Add upstream task dependencies or sensors to wait for required data before running this task
+2026-07-06 10:03:02,870 - airflow_failure_analysis.callback - INFO -    4. Implement retry logic with exponential backoff if data availability is timing-dependent, or modify retries parameter from 0 to allow automatic retries
+2026-07-06 10:03:02,870 - airflow_failure_analysis.callback - INFO -    4. Implement retry logic with exponential backoff if data availability is timing-dependent, or modify retries parameter from 0 to allow automatic retries
+2026-07-06 10:03:02,870 - airflow_failure_analysis.callback - INFO - 
+2026-07-06 10:03:02,870 - airflow_failure_analysis.callback - INFO - 
+2026-07-06 10:03:02,871 - airflow_failure_analysis.callback - INFO - ⚙️  Affected Components:
+2026-07-06 10:03:02,871 - airflow_failure_analysis.callback - INFO - ⚙️  Affected Components:
+2026-07-06 10:03:02,871 - airflow_failure_analysis.callback - INFO -    - DAG: ATMS_load_opensearch_dag
+2026-07-06 10:03:02,871 - airflow_failure_analysis.callback - INFO -    - DAG: ATMS_load_opensearch_dag
+2026-07-06 10:03:02,871 - airflow_failure_analysis.callback - INFO -    - Task: repair_and_check_data function
+2026-07-06 10:03:02,871 - airflow_failure_analysis.callback - INFO -    - Task: repair_and_check_data function
+2026-07-06 10:03:02,871 - airflow_failure_analysis.callback - INFO -    - Python file: /efs/airflow-venv/tvd-prod/dags/ATMS_load_opensearch.py
+2026-07-06 10:03:02,871 - airflow_failure_analysis.callback - INFO -    - Python file: /efs/airflow-venv/tvd-prod/dags/ATMS_load_opensearch.py
+2026-07-06 10:03:02,871 - airflow_failure_analysis.callback - INFO - 
+2026-07-06 10:03:02,871 - airflow_failure_analysis.callback - INFO - 
+2026-07-06 10:03:02,871 - airflow_failure_analysis.callback - INFO - 📋 Relevant Log Excerpt:
+2026-07-06 10:03:02,871 - airflow_failure_analysis.callback - INFO - 📋 Relevant Log Excerpt:
+2026-07-06 10:03:02,871 - airflow_failure_analysis.callback - INFO -    airflow.exceptions.AirflowFailException: Data not available for 2026-06-28
+2026-07-06 10:03:02,871 - airflow_failure_analysis.callback - INFO -    airflow.exceptions.AirflowFailException: Data not available for 2026-06-28
+2026-07-06 10:03:02,871 - airflow_failure_analysis.callback - INFO -    File "/efs/airflow-venv/tvd-prod/dags/ATMS_load_opensearch.py", line 78, in repair_and_check_data
+2026-07-06 10:03:02,871 - airflow_failure_analysis.callback - INFO -    File "/efs/airflow-venv/tvd-prod/dags/ATMS_load_opensearch.py", line 78, in repair_and_check_data
+2026-07-06 10:03:02,871 - airflow_failure_analysis.callback - INFO -    raise AirflowFailException(f'Data not available for {data_date}')
+2026-07-06 10:03:02,871 - airflow_failure_analysis.callback - INFO -    raise AirflowFailException(f'Data not available for {data_date}')
+2026-07-06 10:03:02,871 - airflow_failure_analysis.callback - INFO - 
+2026-07-06 10:03:02,871 - airflow_failure_analysis.callback - INFO - 

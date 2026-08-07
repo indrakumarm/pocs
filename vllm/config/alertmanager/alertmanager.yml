@@ -1,0 +1,77 @@
+# =============================================================================
+# alertmanager.yml — Alertmanager notification routing
+#
+# Configure receivers (Slack, email, PagerDuty, webhook) to get notified when
+# Prometheus fires the SLO alerts defined in config/prometheus/rules/slo_alerts.yml
+#
+# Reference: https://prometheus.io/docs/alerting/latest/configuration/
+# =============================================================================
+
+global:
+  # How long to wait before re-sending a still-firing alert
+  resolve_timeout: 5m
+
+  # ── Slack (fill in your webhook URL) ───────────────────────────────────────
+  # slack_api_url: 'https://hooks.slack.com/services/YOUR/WEBHOOK/URL'
+
+route:
+  # Default receiver for all alerts
+  receiver: "default"
+
+  # Group alerts by these labels to avoid alert spam
+  group_by: ["alertname", "platform"]
+  group_wait:      30s    # wait before sending first notification for a new group
+  group_interval:  5m     # wait before sending follow-up notifications
+  repeat_interval: 4h     # re-send if alert is still firing after this long
+
+  # Route critical alerts faster
+  routes:
+    - match:
+        severity: critical
+      receiver: "critical"
+      repeat_interval: 1h
+
+    - match:
+        severity: info
+      receiver: "default"
+      repeat_interval: 24h
+
+receivers:
+  # ── Default: log to console (no-op until configured) ───────────────────────
+  # Replace with a real receiver once you have a Slack/email channel.
+  - name: "default"
+    webhook_configs:
+      - url: "http://localhost:9999/noop"  # placeholder — replace with real endpoint
+        send_resolved: true
+
+  # ── Critical: same destination for now, separate for easy future split ──────
+  - name: "critical"
+    webhook_configs:
+      - url: "http://localhost:9999/noop"  # placeholder — replace with real endpoint
+        send_resolved: true
+
+  # ── Slack example (uncomment and fill in) ───────────────────────────────────
+  # - name: "slack"
+  #   slack_configs:
+  #     - channel: "#llm-serving-alerts"
+  #       send_resolved: true
+  #       title: '[{{ .Status | toUpper }}] {{ .CommonAnnotations.summary }}'
+  #       text: '{{ .CommonAnnotations.description }}'
+
+  # ── Email example (uncomment and fill in) ───────────────────────────────────
+  # - name: "email"
+  #   email_configs:
+  #     - to: "your-team@example.com"
+  #       from: "alertmanager@example.com"
+  #       smarthost: "smtp.example.com:587"
+  #       auth_username: "alertmanager@example.com"
+  #       auth_password: "your-smtp-password"
+  #       send_resolved: true
+
+inhibit_rules:
+  # Suppress warning alerts if a critical alert is already firing for the same GPU
+  - source_match:
+      severity: "critical"
+    target_match:
+      severity: "warning"
+    equal: ["alertname"]

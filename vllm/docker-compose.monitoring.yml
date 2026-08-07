@@ -1,0 +1,173 @@
+# =============================================================================
+# docker-compose.monitoring.yml — Monitoring Stack
+#
+# Runs on a SEPARATE monitoring host (NOT the GPU instance).
+#
+# Services:
+#   - prometheus     (scrapes metrics from the GPU host over the network)
+#   - grafana        (dashboards — connects to prometheus on same host)
+#   - alertmanager   (receives alerts from prometheus, sends notifications)
+#
+# Why separate from the GPU host:
+#   - GPU instances are expensive and ephemeral. Metric history should survive
+#     a GPU restart or instance replacement.
+#   - Prometheus + Grafana idle RAM (~500MB) competes with model KV cache on
+#     the GPU box — every MB of VRAM is precious.
+#   - One monitoring host can watch N GPU instances by adding scrape targets.
+#
+# Prerequisites:
+#   - GPU host is running docker-compose.yml (nginx + exporters)
+#   - Ports 8000, 9400, 9100 on the GPU host are reachable from this host
+#     (security group / firewall rule: allow monitoring host IP → those ports)
+#
+# Usage:
+#   # Set the GPU host IP first (in .env or env var):
+#   echo "GPU_HOST_IP=54.x.x.x" > .env
+#   echo "GRAFANA_ADMIN_PASSWORD=your-secure-password" >> .env
+#
+#   # Start
+#   make monitoring-up GPU_HOST_IP=54.x.x.x
+#   # OR with .env file:
+#   docker compose -f docker-compose.monitoring.yml up -d
+#
+#   # Stop
+#   make monitoring-down
+#
+# Accessing dashboards:
+#   Grafana:      http://<monitoring-host-ip>:3000
+#   Prometheus:   http://<monitoring-host-ip>:9090
+#   Alertmanager: http://<monitoring-host-ip>:9093
+#
+#   From your laptop (SSH tunnel):
+#     ssh -N -L 3000:localhost:3000 -L 9090:localhost:9090 user@<monitoring-host>
+#
+# Environment variables (.env file or shell):
+#   GPU_HOST_IP              IP or hostname of the GPU instance (REQUIRED)
+#   GRAFANA_ADMIN_PASSWORD   Grafana admin password (default: changeme)
+# =============================================================================
+
+services:
+
+  # ── Prometheus — metrics scraper + TSDB ─────────────────────────────────────
+  # prometheus.yml uses ${GPU_HOST_IP} as a placeholder. The entrypoint runs
+  # envsubst to render the template into the actual config before Prometheus starts.
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: monitoring-prometheus
+    restart: unless-stopped
+    entrypoint:
+      - /bin/sh
+      - -c
+      - |
+        # Render prometheus.yml template, substituting ${GPU_HOST_IP}
+        envsubst '$$GPU_HOST_IP' \
+          < /etc/prometheus/prometheus.yml.tmpl \
+          > /tmp/prometheus.yml
+        echo "[prometheus-init] Rendered config for GPU host: $${GPU_HOST_IP}"
+        exec /bin/prometheus \
+          --config.file=/tmp/prometheus.yml \
+          --storage.tsdb.path=/prometheus \
+          --storage.tsdb.retention.time=30d \
+          --web.console.libraries=/usr/share/prometheus/console_libraries \
+          --web.console.templates=/usr/share/prometheus/consoles \
+          --web.enable-lifecycle
+    environment:
+      - GPU_HOST_IP=${GPU_HOST_IP}
+    volumes:
+      # Mount prometheus.yml as a template (entrypoint renders it at startup)
+      - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml.tmpl:ro
+      - ./config/prometheus/rules:/etc/prometheus/rules:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks:
+      - monitoring
+    depends_on:
+      - alertmanager
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9090/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "100m"
+        max-file: "5"
+
+  # ── Grafana — dashboards ─────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.2.2
+    container_name: monitoring-grafana
+    restart: unless-stopped
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-changeme}
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+      # Server root URL — set to your monitoring host's actual URL if using a domain
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+    volumes:
+      - grafana_data:/var/lib/grafana
+      # Auto-provisions the Prometheus datasource and dashboards on first start
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+    ports:
+      - "3000:3000"
+    networks:
+      - monitoring
+    depends_on:
+      - prometheus
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  # ── Alertmanager — alert routing + notifications ─────────────────────────────
+  # Referenced from prometheus.yml: alertmanager:9093 (Docker DNS, same compose)
+  # Configure receivers (Slack, PagerDuty, email) in config/alertmanager/alertmanager.yml
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: monitoring-alertmanager
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    volumes:
+      - ./config/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager_data:/alertmanager
+    ports:
+      - "9093:9093"
+    networks:
+      - monitoring
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9093/-/healthy"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+# ── Named volumes (data persists across container restarts) ───────────────────
+volumes:
+  prometheus_data:
+    driver: local
+  grafana_data:
+    driver: local
+  alertmanager_data:
+    driver: local
+
+# ── Internal network (all monitoring services on the same host) ───────────────
+networks:
+  monitoring:
+    driver: bridge
+    name: monitoring_stack

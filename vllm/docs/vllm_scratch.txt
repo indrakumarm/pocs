@@ -1,0 +1,202 @@
+VLLM
+
+
+ curl http://10.192.10.184:9090/v1/chat/completions \
+   -H "Content-Type: application/json" \
+   -d '{
+     "model": "Qwen/Qwen2.5-1.5B-Instruct",
+     "messages": [
+       {"role": "user", "content": "Say hello in one sentence."}
+     ],
+     "max_tokens": 50,
+     "temperature": 0.7
+   }'
+
+
+
+=======
+Tried to bring up vllm usign docker conatiner:
+-------
+
+Pre-req:
+-------
+# 1. Add the repo
+curl -s -L https://nvidia.github.io/libnvidia-container/stable/rpm/nvidia-container-toolkit.repo \
+  | sudo tee /etc/yum.repos.d/nvidia-container-toolkit.repo
+
+# 2. Install (works on AL2 and AL2023)
+sudo yum install -y nvidia-container-toolkit
+
+# 3. Register runtime with Docker
+sudo nvidia-ctk runtime configure --runtime=docker
+
+# 4. Restart Docker
+sudo systemctl restart docker
+
+# 5. Verify
+docker info | grep -i nvidia
+# Expect: Runtimes: ... nvidia ...
+
+# 6. Smoke test — hello-GPU from container
+docker run --rm --gpus all nvidia/cuda:12.4.0-base-ubuntu22.04 nvidia-smi
+
+
+
+[ec2-user@ip-10-192-10-184 vllm_ws]$ ps -ef |grep vllm
+ec2-user   35804   34609  0 04:34 pts/0    00:00:00 grep --color=auto vllm
+[ec2-user@ip-10-192-10-184 vllm_ws]$ make run
+docker run -d \
+    --name vllm-server \
+    --gpus all \
+    --restart unless-stopped \
+    -p 8000:8000 \
+    -v /home/ec2-user/.cache/huggingface:/root/.cache/huggingface \
+    -e VLLM_MODEL= \
+    -e HF_TOKEN= \
+    my-vllm
+29b65e018f9306908f573ec92f10c7c7ca24b4ce31aebfd4dd726e75a5fc0999
+docker: Error response from daemon: could not select device driver "" with capabilities: [[gpu]].
+make: *** [Makefile:15: run] Error 125
+
+
+[ec2-user@ip-10-192-10-184 vllm_ws]$ 
+[ec2-user@ip-10-192-10-184 vllm_ws]$ nvidia-smi
+Tue Aug  4 04:38:25 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 595.71.05              Driver Version: 595.71.05      CUDA Version: 13.2     |
++-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  Tesla T4                       Off |   00000000:00:1E.0 Off |                    0 |
+| N/A   28C    P8              9W /   70W |       0MiB /  15360MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI              PID   Type   Process name                        GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+[ec2-user@ip-10-192-10-184 vllm_ws]$ docker info | grep -iE "runtime|nvidia"
+ Runtimes: io.containerd.runc.v2 runc
+ Default Runtime: runc
+
+
+
+[ec2-user@ip-10-192-10-184 vllm_ws]$ sudo yum install -y nvidia-container-toolkit
+Last metadata expiration check: 19:24:59 ago on Mon Aug  3 09:16:16 2026.
+Dependencies resolved.
+=================================================================================================================================================================================================================
+ Package                                                         Architecture                             Version                                     Repository                                            Size
+=================================================================================================================================================================================================================
+Installing:
+ nvidia-container-toolkit                                        x86_64                                   1.19.0-1                                    amazonlinux-nvidia                                   1.4 M
+Installing dependencies:
+ libnvidia-container-tools                                       x86_64                                   1.19.0-1                                    amazonlinux-nvidia                                    45 k
+ libnvidia-container1                                            x86_64                                   1.19.0-1                                    amazonlinux-nvidia                                   1.3 M
+ nvidia-container-toolkit-base                                   x86_64                                   1.19.0-1                                    amazonlinux-nvidia                                   5.9 M
+
+Transaction Summary
+=================================================================================================================================================================================================================
+Install  4 Packages
+
+Total download size: 8.6 M
+Installed size: 34 M
+Downloading Packages:
+(1/4): libnvidia-container-tools-1.19.0-1.x86_64.rpm                                                                                                                             749 kB/s |  45 kB     00:00    
+(2/4): nvidia-container-toolkit-1.19.0-1.x86_64.rpm                                                                                                                               13 MB/s | 1.4 MB     00:00    
+(3/4): libnvidia-container1-1.19.0-1.x86_64.rpm                                                                                                                                   10 MB/s | 1.3 MB     00:00    
+(4/4): nvidia-container-toolkit-base-1.19.0-1.x86_64.rpm                                                                                                                          37 MB/s | 5.9 MB     00:00    
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+Total                                                                                                                                                                             32 MB/s | 8.6 MB     00:00     
+Running transaction check
+Transaction check succeeded.
+Running transaction test
+Transaction test succeeded.
+Running transaction
+  Preparing        :                                                                                                                                                                                         1/1 
+  Installing       : nvidia-container-toolkit-base-1.19.0-1.x86_64                                                                                                                                           1/4 
+  Running scriptlet: nvidia-container-toolkit-base-1.19.0-1.x86_64                                                                                                                                           1/4 
+Created symlink /etc/systemd/system/multi-user.target.wants/nvidia-cdi-refresh.path → /etc/systemd/system/nvidia-cdi-refresh.path.
+Created symlink /etc/systemd/system/multi-user.target.wants/nvidia-cdi-refresh.service → /etc/systemd/system/nvidia-cdi-refresh.service.
+Regenerating NVIDIA CDI specification...
+
+  Installing       : libnvidia-container1-1.19.0-1.x86_64                                                                                                                                                    2/4 
+  Running scriptlet: libnvidia-container1-1.19.0-1.x86_64                                                                                                                                                    2/4 
+  Installing       : libnvidia-container-tools-1.19.0-1.x86_64                                                                                                                                               3/4 
+  Installing       : nvidia-container-toolkit-1.19.0-1.x86_64                                                                                                                                                4/4 
+  Running scriptlet: nvidia-container-toolkit-1.19.0-1.x86_64                                                                                                                                                4/4 
+  Verifying        : libnvidia-container-tools-1.19.0-1.x86_64                                                                                                                                               1/4 
+  Verifying        : libnvidia-container1-1.19.0-1.x86_64                                                                                                                                                    2/4 
+  Verifying        : nvidia-container-toolkit-1.19.0-1.x86_64                                                                                                                                                3/4 
+  Verifying        : nvidia-container-toolkit-base-1.19.0-1.x86_64                                                                                                                                           4/4 
+=================================================================================================================================================================================================================
+WARNING:
+  A newer release of "Amazon Linux" is available.
+
+  Available Versions:
+
+  Version 2023.12.20260706:
+    Run the following command to upgrade to 2023.12.20260706:
+
+      dnf upgrade --releasever=2023.12.20260706
+
+    Release notes:
+     https://docs.aws.amazon.com/linux/al2023/release-notes/relnotes-2023.12.20260706.html
+
+  Version 2023.12.20260710:
+    Run the following command to upgrade to 2023.12.20260710:
+
+      dnf upgrade --releasever=2023.12.20260710
+
+    Release notes:
+     https://docs.aws.amazon.com/linux/al2023/release-notes/relnotes-2023.12.20260710.html
+
+  Version 2023.12.20260720:
+    Run the following command to upgrade to 2023.12.20260720:
+
+      dnf upgrade --releasever=2023.12.20260720
+
+    Release notes:
+     https://docs.aws.amazon.com/linux/al2023/release-notes/relnotes-2023.12.20260720.html
+
+  Version 2023.12.20260724:
+    Run the following command to upgrade to 2023.12.20260724:
+
+      dnf upgrade --releasever=2023.12.20260724
+
+    Release notes:
+     https://docs.aws.amazon.com/linux/al2023/release-notes/relnotes-2023.12.20260724.html
+
+  Version 2023.12.20260727:
+    Run the following command to upgrade to 2023.12.20260727:
+
+      dnf upgrade --releasever=2023.12.20260727
+
+    Release notes:
+     https://docs.aws.amazon.com/linux/al2023/release-notes/relnotes-2023.12.20260727.html
+
+=================================================================================================================================================================================================================
+
+Installed:
+  libnvidia-container-tools-1.19.0-1.x86_64           libnvidia-container1-1.19.0-1.x86_64           nvidia-container-toolkit-1.19.0-1.x86_64           nvidia-container-toolkit-base-1.19.0-1.x86_64          
+
+Complete!
+[ec2-user@ip-10-192-10-184 vllm_ws]$ sudo nvidia-ctk runtime configure --runtime=docker
+INFO[0000] Config file does not exist; using empty config 
+INFO[0000] Wrote updated config to /etc/docker/daemon.json 
+INFO[0000] It is recommended that docker daemon be restarted. 
+[ec2-user@ip-10-192-10-184 vllm_ws]$ sudo nvidia-ctk runtime configure --runtime=docker
+INFO[0000] Loading config from /etc/docker/daemon.json  
+INFO[0000] Wrote updated config to /etc/docker/daemon.json 
+INFO[0000] It is recommended that docker daemon be restarted. 
+
+[ec2-user@ip-10-192-10-184 vllm_ws]$ sudo systemctl restart docker
+[ec2-user@ip-10-192-10-184 vllm_ws]$ docker info | grep -i nvidia
+ Runtimes: io.containerd.runc.v2 nvidia runc
+
+

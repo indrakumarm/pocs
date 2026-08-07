@@ -1,0 +1,120 @@
+# =============================================================================
+# rules/slo_alerts.yml — SLO and health alert rules for the LLM Serving Platform
+# =============================================================================
+
+groups:
+  # ── vLLM SLO Alerts ──────────────────────────────────────────────────────
+  - name: vllm_slo
+    rules:
+      - alert: HighTTFT
+        expr: |
+          histogram_quantile(0.95,
+            rate(vllm:time_to_first_token_seconds_bucket[5m])
+          ) > 0.5
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "TTFT p95 above 500ms SLO"
+          description: "TTFT p95 is {{ $value | humanizeDuration }} — above the 500ms OpenRouter threshold"
+
+      - alert: HighRequestQueueDepth
+        expr: vllm:num_requests_waiting > 20
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "vLLM request queue > 20"
+          description: "{{ $value }} requests queued — GPU may be overloaded"
+
+      - alert: KVCacheNearFull
+        expr: vllm:gpu_cache_usage_perc > 90
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "KV cache > 90% full"
+          description: "KV cache at {{ $value }}% — risk of request preemption/eviction"
+
+      - alert: KVCacheCritical
+        expr: vllm:gpu_cache_usage_perc > 98
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "KV cache critically full (>98%)"
+          description: "KV cache at {{ $value }}% — requests are being evicted"
+
+      - alert: vLLMDown
+        expr: up{job="vllm"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "vLLM engine is down"
+          description: "Prometheus cannot scrape vLLM /metrics endpoint"
+
+  # ── GPU Health Alerts ────────────────────────────────────────────────────
+  - name: gpu_health
+    rules:
+      - alert: GPUTemperatureHigh
+        expr: DCGM_FI_DEV_GPU_TEMP > 83
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "GPU temperature high ({{ $value }}°C)"
+          description: "GPU {{ $labels.gpu }} temperature {{ $value }}°C — thermal throttle may activate above 85°C"
+
+      - alert: GPUTemperatureCritical
+        expr: DCGM_FI_DEV_GPU_TEMP > 88
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "GPU temperature critical ({{ $value }}°C)"
+          description: "GPU {{ $labels.gpu }} at {{ $value }}°C — risk of thermal shutdown"
+
+      - alert: GPUHighMemoryUsage
+        expr: |
+          DCGM_FI_DEV_FB_USED / (DCGM_FI_DEV_FB_USED + DCGM_FI_DEV_FB_FREE) > 0.97
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "GPU VRAM usage > 97%"
+          description: "GPU VRAM almost full — OOM risk for new requests"
+
+      - alert: GPUUtilizationLow
+        expr: DCGM_FI_DEV_GPU_UTIL < 5
+        for: 30m
+        labels:
+          severity: info
+        annotations:
+          summary: "GPU idle for 30 minutes"
+          description: "GPU utilization at {{ $value }}% — consider stopping instance to save cost"
+
+  # ── Host Health Alerts ───────────────────────────────────────────────────
+  - name: host_health
+    rules:
+      - alert: DiskSpaceLow
+        expr: |
+          node_filesystem_avail_bytes{mountpoint=~"(/|/mnt/instance_store)"} /
+          node_filesystem_size_bytes{mountpoint=~"(/|/mnt/instance_store)"}
+          < 0.10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk space < 10% on {{ $labels.mountpoint }}"
+          description: "Only {{ $value | humanizePercentage }} disk space remaining — model cache may fill up"
+
+      - alert: HighSystemMemory
+        expr: |
+          node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes < 0.05
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "System RAM < 5% available"
+          description: "Only {{ $value | humanizePercentage }} RAM available — risk of OOM killer"

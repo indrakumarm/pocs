@@ -1,0 +1,51 @@
+# vLLM serve configuration
+# All keys here map directly to `vllm serve` CLI arguments.
+# Reference: https://docs.vllm.ai/en/latest/serving/openai_compatible_server.html
+#
+# To override any value at runtime without editing this file, set the
+# corresponding env var before `docker run`, e.g.:
+#   -e VLLM_MODEL=meta-llama/Llama-3-8B-Instruct
+#   -e VLLM_MAX_MODEL_LEN=4096
+# (handled by init-script.sh)
+
+# ── Model ────────────────────────────────────────────────────────────────────
+# Model is NOT baked into the image. Supply it at runtime via one of:
+#
+# Option A — pull from HuggingFace at startup (requires HF_TOKEN for gated models):
+#   -e VLLM_MODEL=Qwen/Qwen2.5-7B-Instruct
+#   -e HF_TOKEN=hf_xxxx
+#   (model is downloaded into the HF cache dir on first run)
+#
+# Option B — mount a pre-downloaded model directory:
+#   -v /host/models:/root/.cache/huggingface/hub:ro
+#   -e VLLM_MODEL=/root/.cache/huggingface/hub/models--Qwen--Qwen2.5-7B-Instruct/snapshots/<hash>
+#   OR point to whatever local path you mounted, e.g.:
+#   -v /host/models/Qwen2.5-7B-Instruct:/model:ro  -e VLLM_MODEL=/model
+#
+# Uncomment the line below to set a default (still overridable via VLLM_MODEL env var):
+# model: Qwen/Qwen2.5-7B-Instruct
+# tokenizer: Qwen/Qwen2.5-7B-Instruct   # defaults to model if omitted
+# revision: main                         # model repo branch/tag/commit
+
+# ── Server ───────────────────────────────────────────────────────────────────
+host: "0.0.0.0"
+port: 8000
+# api-key: "YOUR_SECRET_KEY"           # optional; set via VLLM_API_KEY env var
+
+# ── Compute / precision ──────────────────────────────────────────────────────
+dtype: auto          # auto | float16 | bfloat16 | float32
+# quantization: null # awq | gptq | squeezellm | bitsandbytes | null
+
+# ── Memory / batching ────────────────────────────────────────────────────────
+max-model-len: 8192          # max context length (tokens); reduce if OOM
+gpu-memory-utilization: 0.90 # fraction of GPU VRAM vLLM may use (0.0–1.0)
+# max-num-seqs: 256           # max parallel sequences per iteration
+# max-num-batched-tokens: null # defaults to max-model-len
+
+# ── Tensor parallelism (multi-GPU) ───────────────────────────────────────────
+tensor-parallel-size: 1   # number of GPUs to shard the model across
+
+# ── Misc ─────────────────────────────────────────────────────────────────────
+# trust-remote-code: false   # set true for models that need custom code
+# disable-log-requests: false
+# uvicorn-log-level: info

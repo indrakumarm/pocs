@@ -1,0 +1,48 @@
+ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-07-06 09:08:47,445 - airflow_failure_analysis.callback - INFO - 📊 FAILURE ANALYSIS RESULTS
+2026-07-06 09:08:47,445 - airflow_failure_analysis.callback - INFO - 📊 FAILURE ANALYSIS RESULTS
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO - ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO - ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO - 
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO - 
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO - 🔴 Error Type: TypeError
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO - 🔴 Error Type: TypeError
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO - 
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO - 
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO - 🎯 Root Cause:
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO - 🎯 Root Cause:
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO -    The root cause is a TypeError due to an unsupported operand type for multiplication, specifically because one of the operands is NoneType.
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO -    The root cause is a TypeError due to an unsupported operand type for multiplication, specifically because one of the operands is NoneType.
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO - 
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO - 
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO - 💡 Fix Suggestions:
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO - 💡 Fix Suggestions:
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO -    1. Check the variables `channel_status` and `hh_status` to ensure they are not None before performing multiplication.
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO -    1. Check the variables `channel_status` and `hh_status` to ensure they are not None before performing multiplication.
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO -    2. Add null checks or default values for `channel_status` and `hh_status` in the `validateData` function.
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO -    2. Add null checks or default values for `channel_status` and `hh_status` in the `validateData` function.
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO - 
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO - 
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO - ⚙️  Affected Components:
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO - ⚙️  Affected Components:
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO -    - DAG: adhoc_channel_check_dag
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO -    - DAG: adhoc_channel_check_dag
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO -    - Task: run_id=scheduled__2026-07-05T08:30:00+00:00
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO -    - Task: run_id=scheduled__2026-07-05T08:30:00+00:00
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO - 
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO - 
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO - 📋 Relevant Log Excerpt:
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO - 📋 Relevant Log Excerpt:
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO -    File "/efs/airflow-venv/tvd-prod/dags/PROD/adhoc_channel_check_dag.py", line 112, in validateData
+    return (100 * channel_status + 10 * hh_status + record_status)
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO -    File "/efs/airflow-venv/tvd-prod/dags/PROD/adhoc_channel_check_dag.py", line 112, in validateData
+    return (100 * channel_status + 10 * hh_status + record_status)
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO -    File "/efs/airflow-venv/tvd-prod/dags/PROD/adhoc_channel_check_dag.py", line 147, in adhoc_channel_check
+    validation_code = validateData(variants, extract_type)
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO -    File "/efs/airflow-venv/tvd-prod/dags/PROD/adhoc_channel_check_dag.py", line 147, in adhoc_channel_check
+    validation_code = validateData(variants, extract_type)
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO - 
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO - 
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO - 🔍 Confidence: high
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO - 🔍 Confidence: high
+2026-07-06 09:08:47,446 - airflow_failure_analysis.callback - INFO - ━━━━━━━━━━━━━━━━━━━━

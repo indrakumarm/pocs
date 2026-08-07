@@ -1,0 +1,126 @@
+# =============================================================================
+# prometheus.yml — Prometheus scrape configuration for the LLM Serving Platform
+#
+# This file is used as a TEMPLATE. The monitoring compose (docker-compose.monitoring.yml)
+# runs envsubst over it before starting Prometheus, substituting:
+#
+#   ${GPU_HOST_IP}   → IP or hostname of the GPU box running vLLM + exporters
+#
+# Set GPU_HOST_IP in docker-compose.monitoring.yml or in a .env file on the
+# monitoring host before running `make monitoring-up`.
+#
+# Scrapes three remote metric sources on the GPU box:
+#   1. vLLM engine      ${GPU_HOST_IP}:8000/metrics  (inference + queue metrics)
+#   2. DCGM Exporter    ${GPU_HOST_IP}:9400/metrics  (GPU utilization, VRAM, temp, power)
+#   3. Node Exporter    ${GPU_HOST_IP}:9100/metrics  (CPU, RAM, disk, network)
+#
+# Make sure the GPU host's firewall/security group allows inbound TCP on
+# ports 8000, 9400, 9100 from the monitoring host IP only.
+# =============================================================================
+
+global:
+  scrape_interval:     15s   # default scrape frequency
+  evaluation_interval: 15s   # rule evaluation frequency
+  scrape_timeout:      10s
+
+  # Labels added to every time series produced by this Prometheus instance
+  external_labels:
+    platform: "llm-serving"
+    environment: "phase1"
+    # deployment: "qwen32b-prod-01"   # override per deployment
+
+# ── Alerting ─────────────────────────────────────────────────────────────────
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            - alertmanager:9093
+
+# ── Alert rules ───────────────────────────────────────────────────────────────
+rule_files:
+  - "/etc/prometheus/rules/*.yml"
+
+# ── Scrape jobs ───────────────────────────────────────────────────────────────
+scrape_configs:
+
+  # ── 1. vLLM engine metrics ──────────────────────────────────────────────────
+  # Built-in Prometheus endpoint exposed by vLLM at /metrics.
+  # Key metrics:
+  #   vllm:time_to_first_token_seconds       (histogram — TTFT)
+  #   vllm:time_per_output_token_seconds     (histogram — inter-token latency)
+  #   vllm:e2e_request_latency_seconds       (histogram — full request latency)
+  #   vllm:num_requests_running              (gauge — active sequences)
+  #   vllm:num_requests_waiting              (gauge — queue depth)
+  #   vllm:gpu_cache_usage_perc              (gauge — KV cache utilization %)
+  #   vllm:prompt_tokens_total               (counter — input tokens)
+  #   vllm:generation_tokens_total           (counter — output tokens)
+  #   vllm:request_success_total             (counter — successful completions)
+  - job_name: "vllm"
+    scrape_interval: 10s    # scrape more frequently for real-time SLO tracking
+    static_configs:
+      - targets: ["${GPU_HOST_IP}:8000"]
+        labels:
+          component: "inference_engine"
+    metrics_path: /metrics
+
+  # ── 2. GPU metrics (DCGM Exporter) ──────────────────────────────────────────
+  # NVIDIA DCGM Exporter exposes per-GPU metrics.
+  # Key metrics:
+  #   DCGM_FI_DEV_GPU_UTIL          (gauge — GPU compute utilization %)
+  #   DCGM_FI_DEV_MEM_COPY_UTIL     (gauge — GPU memory bandwidth %)
+  #   DCGM_FI_DEV_FB_USED           (gauge — VRAM used MiB)
+  #   DCGM_FI_DEV_FB_FREE           (gauge — VRAM free MiB)
+  #   DCGM_FI_DEV_GPU_TEMP          (gauge — GPU temperature °C)
+  #   DCGM_FI_DEV_POWER_USAGE       (gauge — power draw W)
+  #   DCGM_FI_DEV_POWER_LIMIT       (gauge — power limit W)
+  #   DCGM_FI_DEV_SM_CLOCK          (gauge — SM clock MHz)
+  #   DCGM_FI_DEV_MEM_CLOCK         (gauge — memory clock MHz)
+  - job_name: "gpu"
+    scrape_interval: 5s     # GPU metrics change rapidly; scrape frequently
+    static_configs:
+      - targets: ["${GPU_HOST_IP}:9400"]
+        labels:
+          component: "gpu"
+
+  # ── 3. System/host metrics (Node Exporter) ───────────────────────────────────
+  # Key metrics:
+  #   node_cpu_seconds_total                     (CPU time by mode)
+  #   node_memory_MemAvailable_bytes             (free RAM)
+  #   node_memory_MemTotal_bytes                 (total RAM)
+  #   node_disk_read_bytes_total                 (disk reads — model loading)
+  #   node_disk_written_bytes_total              (disk writes)
+  #   node_network_receive_bytes_total           (inbound bytes — prompts)
+  #   node_network_transmit_bytes_total          (outbound bytes — completions)
+  #   node_filesystem_avail_bytes                (free space per mount)
+  - job_name: "node"
+    scrape_interval: 15s
+    static_configs:
+      - targets: ["${GPU_HOST_IP}:9100"]
+        labels:
+          component: "host"
+
+  # ── 4. Nginx metrics (optional — requires nginx-prometheus-exporter) ─────────
+  # Uncomment if you add the nginx-prometheus-exporter sidecar to docker-compose.
+  # Provides: nginx_connections_active, nginx_http_requests_total, etc.
+  # - job_name: "nginx"
+  #   scrape_interval: 15s
+  #   static_configs:
+  #     - targets: ["nginx-exporter:9113"]
+  #       labels:
+  #         component: "gateway"
+
+  # ── 5. FastAPI gateway (optional) ────────────────────────────────────────────
+  # If the gateway container exposes /metrics, add it here.
+  # - job_name: "gateway"
+  #   scrape_interval: 10s
+  #   static_configs:
+  #     - targets: ["gateway:8001"]
+  #       labels:
+  #         component: "gateway"
+
+  # ── 6. Self-monitoring ────────────────────────────────────────────────────────
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+        labels:
+          component: "monitoring"

@@ -1,0 +1,174 @@
+# =============================================================================
+# docker-compose.yml — GPU Host Stack
+#
+# Runs ON the GPU instance alongside vLLM.
+# Services:
+#   - nginx          (reverse proxy / TLS termination — faces the internet)
+#   - dcgm-exporter  (GPU metrics exporter, scraped remotely by Prometheus)
+#   - node-exporter  (host system metrics exporter, scraped remotely by Prometheus)
+#   - gateway        (optional FastAPI proxy — use 'gateway' profile)
+#
+# What is NOT here:
+#   - vLLM        → managed separately via `make run / make stop`
+#   - Prometheus  → runs on a separate monitoring host (docker-compose.monitoring.yml)
+#   - Grafana     → runs on a separate monitoring host (docker-compose.monitoring.yml)
+#
+# Separation rationale:
+#   Prometheus + Grafana are NOT on the GPU box because:
+#     - GPU instances are expensive and ephemeral; monitoring data should outlive them.
+#     - Grafana/Prometheus RAM usage competes with model KV cache.
+#     - You may want one monitoring host watching N GPU instances.
+#
+# Usage (on the GPU host):
+#   make gpu-stack-up                         # start nginx + exporters
+#   make gpu-stack-up-gateway                 # also start FastAPI gateway
+#   make gpu-stack-down                       # stop
+#   docker compose logs -f nginx              # tail nginx logs
+#
+# Ports exposed to the network (must be reachable by the monitoring host):
+#   :80 / :443  — nginx (public API)
+#   :9400       — DCGM GPU exporter (restrict to monitoring host IP in firewall)
+#   :9100       — Node exporter    (restrict to monitoring host IP in firewall)
+# =============================================================================
+
+services:
+
+  # ── Nginx — reverse proxy + TLS ─────────────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: platform-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./config/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      # TLS certificates — mount when ready:
+      # - ./certs:/etc/nginx/certs:ro
+    networks:
+      - platform
+    depends_on: []   # vLLM is external — nginx will retry upstream automatically
+    healthcheck:
+      test: ["CMD", "nginx", "-t"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+  # ── DCGM Exporter — GPU metrics (NVIDIA) ────────────────────────────────────
+  # Exposes per-GPU metrics (utilization, VRAM, temp, power) at :9400/metrics
+  # Requires the NVIDIA Container Runtime (validated by preflight.sh)
+  dcgm-exporter:
+    image: nvcr.io/nvidia/k8s/dcgm-exporter:3.3.9-3.6.1-ubuntu22.04
+    container_name: platform-dcgm-exporter
+    restart: unless-stopped
+    runtime: nvidia          # requires NVIDIA Container Runtime
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=utility
+    volumes:
+      - ./custom-dcp-metrics.csv:/etc/dcgm-exporter/dcp-metrics-included.csv:ro
+    command:
+      - "-f"
+      - "/etc/dcgm-exporter/dcp-metrics-included.csv"
+    ports:
+      - "9400:9400"
+    cap_add:
+      - SYS_ADMIN            # required for DCGM to read hardware counters
+    networks:
+      - platform
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9400/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # ── Node Exporter — host system metrics ─────────────────────────────────────
+  # Exposes CPU, RAM, disk, network metrics at :9100/metrics
+  node-exporter:
+    image: prom/node-exporter:v1.8.2
+    container_name: platform-node-exporter
+    restart: unless-stopped
+    command:
+      - "--path.rootfs=/host"
+      - "--path.procfs=/host/proc"
+      - "--path.sysfs=/host/sys"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|run)($$|/)"
+      - "--no-collector.ipvs"
+    volumes:
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/host:ro,rslave
+    pid: host   # access host PID namespace for accurate CPU/process metrics
+    ports:
+      - "9100:9100"
+    networks:
+      - platform
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:9100/metrics"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "3"
+
+  # ── FastAPI Gateway — optional custom proxy ──────────────────────────────────
+  # Adds auth, model aliasing, pricing headers, request logging.
+  # Only started when the 'gateway' profile is explicitly requested:
+  #   docker compose --profile gateway up -d
+  #
+  # Not needed for Phase 1. Will be built out in Phase 4+ of the platform.
+  gateway:
+    profiles:
+      - gateway
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    container_name: platform-gateway
+    restart: unless-stopped
+    environment:
+      - VLLM_BACKEND_URL=http://vllm:8000       # resolved via Docker network or external
+      - GATEWAY_API_KEY=${GATEWAY_API_KEY:-}
+      - LOG_LEVEL=info
+    ports:
+      - "8001:8001"
+    networks:
+      - platform
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+# ── Network — shared with vLLM container ─────────────────────────────────────
+# The vLLM container (started via `make run`) should join this same network
+# so nginx and Prometheus can reach it by service name.
+#
+# To connect vLLM to this network, add to your `make run` command:
+#   --network vllm_platform
+# Or update Makefile:
+#   docker run ... --network vllm_platform ...
+#
+# The network name is: <project_directory>_platform
+# With project name 'vllm' (default = folder name), it becomes: vllm_platform
+networks:
+  platform:
+    driver: bridge
+    name: vllm_platform    # fixed name so make run can reference it reliably
