@@ -1,0 +1,14 @@
+# Environments
+.venv/
+.pvenv/
+
+# Logs
+*.log
+**/logs/
+
+.venv/
+__pycache__/
+*/aws/lab.env
+*/aws/.state
+*/aws/.known_hosts
+
