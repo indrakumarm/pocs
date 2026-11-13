@@ -1,0 +1,39 @@
+# Week 4: quantization, speculative decoding, engine comparison (vLLM vs SGLang)
+# Experiments may override engine/model/args. Same bench client for all of them.
+base:
+  engine: vllm
+  model: Qwen/Qwen3-8B
+  port: 8000
+  gpus: [0]
+  args: [--max-model-len, 8192]
+bench_args: [--concurrency, 1, 4, 16, 32, 64, --input-tokens, 1024, --output-tokens, 256]
+out: results/week4.csv
+experiments:
+  # --- quantization (needs matching HF repos) ---
+  - tag: vllm-bf16
+  - tag: vllm-fp8-dynamic
+    args: [--max-model-len, 8192, --quantization, fp8]
+  - tag: vllm-fp8-prequant
+    model: Qwen/Qwen3-8B-FP8
+  - tag: vllm-awq
+    model: Qwen/Qwen3-8B-AWQ
+  - tag: vllm-fp8-dynamic-fp8kv
+    args: [--max-model-len, 8192, --quantization, fp8, --kv-cache-dtype, fp8]
+  - tag: vllm-awq-fp8kv
+    model: Qwen/Qwen3-8B-AWQ
+    args: [--max-model-len, 8192, --kv-cache-dtype, fp8]
+  # --- speculative decoding (ngram needs no draft model; low-concurrency win) ---
+  - tag: vllm-spec-ngram
+    args:
+      - --max-model-len
+      - "8192"
+      - --speculative-config
+      - '{"method":"ngram","num_speculative_tokens":4,"prompt_lookup_max":4}'
+  # --- engine comparison: same model, same hardware ---
+  - tag: sglang-bf16
+    engine: sglang
+    port: 8000
+    args: [--context-length, 8192, --mem-fraction-static, 0.90]
+  - tag: sglang-fp8
+    engine: sglang
+    args: [--context-length, 8192, --quantization, fp8]

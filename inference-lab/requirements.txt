@@ -1,0 +1,7 @@
+openai>=1.50
+docker>=7.0
+pyyaml
+pandas
+matplotlib
+httpx
+aiohttp>=3.10,<4

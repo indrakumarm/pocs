@@ -1,0 +1,33 @@
+# One knob changed per experiment. Compare in results/bench.csv.
+base:
+  image: vllm/vllm-openai:latest
+  model: Qwen/Qwen3-8B
+  port: 8000
+  gpus: [0]
+  args: [--max-model-len, 8192, --gpu-memory-utilization, 0.90]
+bench_args: [--concurrency, 1, 4, 16, 32, 64, --input-tokens, 1024, --output-tokens, 256]
+out: results/week3.csv
+# args REPLACE base.args, so each experiment repeats --gpu-memory-utilization to keep KV size equal.
+experiments:
+  - tag: baseline
+  - tag: max-seqs-32
+    args: [--max-model-len, 8192, --gpu-memory-utilization, 0.90, --max-num-seqs, 32]
+  - tag: max-seqs-256
+    args: [--max-model-len, 8192, --gpu-memory-utilization, 0.90, --max-num-seqs, 256]
+  - tag: batched-tokens-2048
+    args: [--max-model-len, 8192, --gpu-memory-utilization, 0.90, --max-num-batched-tokens, 2048]
+  - tag: batched-tokens-16384
+    args: [--max-model-len, 8192, --gpu-memory-utilization, 0.90, --max-num-batched-tokens, 16384]
+  - tag: no-chunked-prefill
+    args: [--max-model-len, 8192, --gpu-memory-utilization, 0.90, --no-enable-chunked-prefill]
+  - tag: prefix-cache-on-shared
+    args: [--max-model-len, 8192, --gpu-memory-utilization, 0.90, --enable-prefix-caching]
+    bench_args: [--shared-prefix]
+  - tag: prefix-cache-off-shared
+    args: [--max-model-len, 8192, --gpu-memory-utilization, 0.90, --no-enable-prefix-caching]
+    bench_args: [--shared-prefix]
+  # 0.6 fails on a 22 GiB GPU (bf16 weights alone are 15.3 GiB); 0.85 leaves ~1.4 GiB KV (~10k tokens)
+  - tag: gpu-util-0.85
+    args: [--max-model-len, 8192, --gpu-memory-utilization, 0.85]
+  - tag: fp8-kv
+    args: [--max-model-len, 8192, --gpu-memory-utilization, 0.90, --kv-cache-dtype, fp8]

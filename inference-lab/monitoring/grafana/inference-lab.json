@@ -1,0 +1,283 @@
+{
+  "title": "Inference Lab: vLLM + GPU bottleneck",
+  "uid": "inference-lab",
+  "description": "vLLM serving metrics next to DCGM GPU metrics. Read top to bottom: saturated? -> memory or compute bound? -> latency -> GPU health.",
+  "editable": true,
+  "schemaVersion": 39,
+  "refresh": "5s",
+  "time": { "from": "now-30m", "to": "now" },
+  "graphTooltip": 1,
+  "templating": {
+    "list": [
+      { "name": "datasource", "label": "Prometheus", "type": "datasource", "query": "prometheus", "hide": 0, "current": {} },
+      {
+        "name": "instance", "label": "DCGM instance", "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "query": "label_values(DCGM_FI_DEV_GPU_TEMP, instance)",
+        "definition": "label_values(DCGM_FI_DEV_GPU_TEMP, instance)",
+        "refresh": 1, "includeAll": false, "multi": false, "hide": 0, "current": {}
+      },
+      { "name": "peak_bw_gbs", "label": "GPU peak BW (GB/s)", "type": "textbox", "query": "600", "current": { "text": "600", "value": "600" }, "hide": 0 },
+      { "name": "peak_tflops", "label": "GPU peak bf16 TFLOPS", "type": "textbox", "query": "125", "current": { "text": "125", "value": "125" }, "hide": 0 }
+    ]
+  },
+  "panels": [
+    {
+      "id": 1, "type": "text", "title": "How to read this dashboard",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "| Pattern | Meaning | Lever |\n|---|---|---|\n| **Memory bandwidth (DRAM Active) ≫ compute (Tensor Active)**, tok/s rises with Running while bandwidth stays flat | **Memory-bound decode** (normal). Batching is nearly free | more concurrency, quantized weights, higher-BW GPU |\n| **Tensor Active high and sustained (>~60%)**, ITL rises with Running | **Compute-bound** | faster GPU, fewer prompt tokens, prefix caching |\n| **KV ≥ 90% and Waiting > 0**, Running flat, GPU panels stop changing | **KV-bound: past the knee.** Extra load only queues (TTFT grows) | fp8 KV, higher gpu-util, shorter requests, bigger GPU |\n| Tensor spikes + ITL p99 spikes together | **Prefill chunks stalling decode** | smaller `--max-num-batched-tokens` |\n| SM clock drops while power/temp high | **Throttling**: numbers worse than estimate | cooling / power, not tuning |\n\n**DRAM Active = memory *bandwidth* in use** (data moving per second), **not** memory *capacity*. Capacity is fixed at startup; the only capacity metric that moves is **KV cache capacity used**.\n\nSet *GPU peak BW* and *TFLOPS* above for your GPU (A10G 600 / 125, L40S 864 / 362, H100 3350 / 989). See docs/concepts.md."
+      }
+    },
+
+    { "id": 2, "type": "row", "title": "Verdict now (last value)", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 6 }, "panels": [] },
+    {
+      "id": 3, "type": "stat", "title": "Memory bandwidth in use (DRAM Active)",
+      "description": "BANDWIDTH, not capacity: share of time the GPU memory bus is moving data (weights + KV) to the compute cores. ~70-80% during decode = streaming as fast as realistically possible. Memory capacity (allocated GB) is a different metric and stays flat.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 7 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "decimals": 0,
+        "thresholds": { "mode": "absolute", "steps": [ { "color": "blue", "value": null }, { "color": "green", "value": 0.5 }, { "color": "orange", "value": 0.85 } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [ { "refId": "A", "expr": "avg(DCGM_FI_PROF_DRAM_ACTIVE{instance=~\"$instance\"})" } ]
+    },
+    {
+      "id": 4, "type": "stat", "title": "Compute used (Tensor Active)",
+      "description": "Low during decode, spikes during prefill. Sustained > ~60% means compute-bound.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 7 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "decimals": 0,
+        "thresholds": { "mode": "absolute", "steps": [ { "color": "blue", "value": null }, { "color": "green", "value": 0.3 }, { "color": "orange", "value": 0.6 } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [ { "refId": "A", "expr": "avg(DCGM_FI_PROF_PIPE_TENSOR_ACTIVE{instance=~\"$instance\"})" } ]
+    },
+    {
+      "id": 5, "type": "stat", "title": "KV cache capacity used",
+      "description": "CAPACITY: how full the reserved KV pool is. Near 100% = no room for another request: you are at the knee.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 7 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "decimals": 0,
+        "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 0.8 }, { "color": "red", "value": 0.95 } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [ { "refId": "A", "expr": "max(vllm:kv_cache_usage_perc) or max(vllm:gpu_cache_usage_perc)" } ]
+    },
+    {
+      "id": 6, "type": "stat", "title": "Requests waiting",
+      "description": "> 0 means requests are queued on the server; TTFT will grow with this number.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 7 },
+      "fieldConfig": { "defaults": { "unit": "none", "decimals": 0,
+        "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [ { "refId": "A", "expr": "sum(vllm:num_requests_waiting)" } ]
+    },
+    {
+      "id": 7, "type": "stat", "title": "Output throughput",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 7 },
+      "fieldConfig": { "defaults": { "unit": "tok/s", "decimals": 0, "color": { "mode": "fixed", "fixedColor": "purple" } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [ { "refId": "A", "expr": "sum(rate(vllm:generation_tokens_total[1m]))" } ]
+    },
+    {
+      "id": 8, "type": "stat", "title": "ITL p99",
+      "description": "~500 ms on A10G = one 2048-token prefill chunk stalling decode.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 7 },
+      "fieldConfig": { "defaults": { "unit": "s", "decimals": 3,
+        "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "orange", "value": 0.1 }, { "color": "red", "value": 0.3 } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "area" },
+      "targets": [ { "refId": "A", "expr": "histogram_quantile(0.99, sum by (le) (rate(vllm:inter_token_latency_seconds_bucket[1m]))) or histogram_quantile(0.99, sum by (le) (rate(vllm:time_per_output_token_seconds_bucket[1m])))" } ]
+    },
+
+    { "id": 26, "type": "row", "title": "0 · Throughput vs latency: where does more load stop paying off?", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 11 }, "panels": [] },
+    {
+      "id": 27, "type": "xychart", "title": "Latency vs throughput (each dot = one 5 s sample while serving)",
+      "description": "Dots move right while throughput still grows; once they stack up vertically, extra load only adds latency (the knee). Idle samples are dropped. For per-level dots use scripts/plot.py on the bench CSV.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 12 },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "show": "points", "pointSize": { "fixed": 6 }, "scaleDistribution": { "type": "log", "log": 10 } } },
+        "overrides": [ { "matcher": { "id": "byName", "options": "output tok/s" }, "properties": [ { "id": "unit", "value": "tok/s" }, { "id": "custom.scaleDistribution", "value": { "type": "linear" } } ] } ] },
+      "options": { "seriesMapping": "auto", "dims": { "frame": 0, "x": "output tok/s" }, "series": [], "legend": { "showLegend": true, "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(vllm:generation_tokens_total[1m])) > 0", "legendFormat": "output tok/s" },
+        { "refId": "B", "expr": "histogram_quantile(0.99, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket[1m])))", "legendFormat": "TTFT p99" },
+        { "refId": "C", "expr": "histogram_quantile(0.99, sum by (le) (rate(vllm:e2e_request_latency_seconds_bucket[1m])))", "legendFormat": "E2E p99" },
+        { "refId": "D", "expr": "histogram_quantile(0.99, sum by (le) (rate(vllm:inter_token_latency_seconds_bucket[1m]))) or histogram_quantile(0.99, sum by (le) (rate(vllm:time_per_output_token_seconds_bucket[1m])))", "legendFormat": "ITL p99" }
+      ],
+      "transformations": [ { "id": "joinByField", "options": { "byField": "Time", "mode": "inner" } } ]
+    },
+    {
+      "id": 28, "type": "timeseries", "title": "Over time: load, throughput and latency together",
+      "description": "Running steps up with each concurrency level. While throughput steps up too, you are below the knee. When Running/throughput go flat and TTFT/E2E keep climbing, you are past it.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 12 },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "lineWidth": 2, "fillOpacity": 0, "axisPlacement": "right", "scaleDistribution": { "type": "log", "log": 10 } } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "output tok/s" }, "properties": [ { "id": "unit", "value": "tok/s" }, { "id": "custom.axisPlacement", "value": "left" }, { "id": "custom.scaleDistribution", "value": { "type": "linear" } }, { "id": "custom.fillOpacity", "value": 15 }, { "id": "color", "value": { "mode": "fixed", "fixedColor": "purple" } } ] },
+          { "matcher": { "id": "byName", "options": "running" }, "properties": [ { "id": "unit", "value": "none" }, { "id": "custom.axisPlacement", "value": "hidden" }, { "id": "custom.scaleDistribution", "value": { "type": "linear" } }, { "id": "custom.lineInterpolation", "value": "stepAfter" }, { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [6, 4] } }, { "id": "color", "value": { "mode": "fixed", "fixedColor": "#888888" } } ] },
+          { "matcher": { "id": "byName", "options": "TTFT p99" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] },
+          { "matcher": { "id": "byName", "options": "E2E p99" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } } ] }
+        ] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(vllm:generation_tokens_total[1m]))", "legendFormat": "output tok/s" },
+        { "refId": "B", "expr": "sum(vllm:num_requests_running)", "legendFormat": "running" },
+        { "refId": "C", "expr": "histogram_quantile(0.99, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket[1m])))", "legendFormat": "TTFT p99" },
+        { "refId": "D", "expr": "histogram_quantile(0.99, sum by (le) (rate(vllm:e2e_request_latency_seconds_bucket[1m])))", "legendFormat": "E2E p99" }
+      ]
+    },
+
+    { "id": 9, "type": "row", "title": "1 · Is the server saturated? (vLLM queue + KV)", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 20 }, "panels": [] },
+    {
+      "id": 10, "type": "timeseries", "title": "Running vs Waiting requests",
+      "description": "Running plateaus at the knee (KV tokens ÷ tokens per request). Anything above that shows up as Waiting.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 21 },
+      "fieldConfig": { "defaults": { "unit": "none", "custom": { "lineWidth": 2, "fillOpacity": 10 } },
+        "overrides": [ { "matcher": { "id": "byName", "options": "waiting" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } } ] } ] },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["mean", "max"] }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "refId": "A", "expr": "sum(vllm:num_requests_running)", "legendFormat": "running" },
+        { "refId": "B", "expr": "sum(vllm:num_requests_waiting)", "legendFormat": "waiting" }
+      ]
+    },
+    {
+      "id": 11, "type": "timeseries", "title": "KV cache usage",
+      "description": "Fills as Running grows. Flat near 100% while Waiting > 0 = KV-bound.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 8, "x": 12, "y": 21 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "custom": { "lineWidth": 2, "fillOpacity": 20 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [ { "refId": "A", "expr": "max(vllm:kv_cache_usage_perc) or max(vllm:gpu_cache_usage_perc)", "legendFormat": "KV used" } ]
+    },
+    {
+      "id": 12, "type": "stat", "title": "Preemptions (time range)",
+      "description": "Requests evicted because KV overflowed. Should be 0; > 0 means wasted recompute.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 4, "x": 20, "y": 21 },
+      "fieldConfig": { "defaults": { "unit": "none", "decimals": 0,
+        "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] } }, "overrides": [] },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [ { "refId": "A", "expr": "sum(increase(vllm:num_preemptions_total[$__range]))" } ]
+    },
+
+    { "id": 13, "type": "row", "title": "2 · Memory- or compute-bound? (vLLM throughput next to GPU pipes)", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 29 }, "panels": [] },
+    {
+      "id": 14, "type": "timeseries", "title": "Token throughput: output (decode) vs prompt (prefill)",
+      "description": "Output tok/s should rise with Running while memory bandwidth in use (right) stays roughly flat: that is batching paying off.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 30 },
+      "fieldConfig": { "defaults": { "unit": "tok/s", "custom": { "lineWidth": 2, "fillOpacity": 10 } },
+        "overrides": [ { "matcher": { "id": "byName", "options": "prompt tok/s" }, "properties": [ { "id": "custom.axisPlacement", "value": "right" } ] } ] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "refId": "A", "expr": "sum(rate(vllm:generation_tokens_total[1m]))", "legendFormat": "output tok/s" },
+        { "refId": "B", "expr": "sum(rate(vllm:prompt_tokens_total[1m]))", "legendFormat": "prompt tok/s" }
+      ]
+    },
+    {
+      "id": 15, "type": "timeseries", "title": "GPU: memory bandwidth in use vs compute in use",
+      "description": "Both are % of time busy, not capacity. Memory bandwidth ≫ compute = memory-bound decode. Compute spikes = prefill. Compute sustained high = compute-bound.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 30 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1, "custom": { "lineWidth": 2, "fillOpacity": 10 } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "memory bandwidth in use (DRAM active)" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } } ] },
+          { "matcher": { "id": "byName", "options": "compute in use (Tensor active)" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } } ] },
+          { "matcher": { "id": "byName", "options": "SM active" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "#888888" } }, { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [6, 4] } } ] }
+        ] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "refId": "A", "expr": "avg(DCGM_FI_PROF_DRAM_ACTIVE{instance=~\"$instance\"})", "legendFormat": "memory bandwidth in use (DRAM active)" },
+        { "refId": "B", "expr": "avg(DCGM_FI_PROF_PIPE_TENSOR_ACTIVE{instance=~\"$instance\"})", "legendFormat": "compute in use (Tensor active)" },
+        { "refId": "C", "expr": "avg(DCGM_FI_PROF_SM_ACTIVE{instance=~\"$instance\"})", "legendFormat": "SM active" }
+      ]
+    },
+
+    { "id": 16, "type": "row", "title": "3 · Decode: inter-token latency vs achieved bandwidth", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 38 }, "panels": [] },
+    {
+      "id": 17, "type": "timeseries", "title": "ITL p50 / p99",
+      "description": "p50 ≈ weight bytes ÷ achieved bandwidth (35 ms on A10G for Qwen3-8B). p99 jumps when prefill chunks stall decode.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 39 },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "lineWidth": 2, "fillOpacity": 0 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.5, sum by (le) (rate(vllm:inter_token_latency_seconds_bucket[1m]))) or histogram_quantile(0.5, sum by (le) (rate(vllm:time_per_output_token_seconds_bucket[1m])))", "legendFormat": "ITL p50" },
+        { "refId": "B", "expr": "histogram_quantile(0.99, sum by (le) (rate(vllm:inter_token_latency_seconds_bucket[1m]))) or histogram_quantile(0.99, sum by (le) (rate(vllm:time_per_output_token_seconds_bucket[1m])))", "legendFormat": "ITL p99" }
+      ]
+    },
+    {
+      "id": 18, "type": "timeseries", "title": "Achieved memory bandwidth (GB/s) and compute (TFLOPS)",
+      "description": "Data moved per second and math done per second, not memory allocated. Approximate: DCGM activity ratio × datasheet peak. Compare with the estimator: decode should sit near 0.75 × peak GB/s, prefill near 0.5 × peak TFLOPS.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 39 },
+      "fieldConfig": { "defaults": { "unit": "none", "decimals": 0, "custom": { "lineWidth": 2, "fillOpacity": 10 } },
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "GB/s" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } }, { "id": "custom.axisLabel", "value": "GB/s" } ] },
+          { "matcher": { "id": "byName", "options": "TFLOPS" }, "properties": [ { "id": "color", "value": { "mode": "fixed", "fixedColor": "orange" } }, { "id": "custom.axisPlacement", "value": "right" }, { "id": "custom.axisLabel", "value": "TFLOPS" } ] }
+        ] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "refId": "A", "expr": "avg(DCGM_FI_PROF_DRAM_ACTIVE{instance=~\"$instance\"}) * $peak_bw_gbs", "legendFormat": "GB/s" },
+        { "refId": "B", "expr": "avg(DCGM_FI_PROF_PIPE_TENSOR_ACTIVE{instance=~\"$instance\"}) * $peak_tflops", "legendFormat": "TFLOPS" }
+      ]
+    },
+
+    { "id": 19, "type": "row", "title": "4 · Prefill and what each user experiences", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 47 }, "panels": [] },
+    {
+      "id": 20, "type": "timeseries", "title": "TTFT p50 / p99 and E2E p99",
+      "description": "Below the knee ≈ prompt ÷ prefill speed. Past the knee it grows with Waiting (queue time).",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 48 },
+      "fieldConfig": { "defaults": { "unit": "s", "custom": { "lineWidth": 2, "fillOpacity": 0 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max"] }, "tooltip": { "mode": "multi" } },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.5, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket[1m])))", "legendFormat": "TTFT p50" },
+        { "refId": "B", "expr": "histogram_quantile(0.99, sum by (le) (rate(vllm:time_to_first_token_seconds_bucket[1m])))", "legendFormat": "TTFT p99" },
+        { "refId": "C", "expr": "histogram_quantile(0.99, sum by (le) (rate(vllm:e2e_request_latency_seconds_bucket[1m])))", "legendFormat": "E2E p99 (TTFT + all decode steps)" }
+      ]
+    },
+    {
+      "id": 21, "type": "timeseries", "title": "Per-user output speed (output tok/s ÷ running)",
+      "description": "Falls slowly as Running grows (each request's KV must also be read). Total throughput = this × Running.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 48 },
+      "fieldConfig": { "defaults": { "unit": "tok/s", "decimals": 1, "custom": { "lineWidth": 2, "fillOpacity": 10 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "min"] }, "tooltip": { "mode": "multi" } },
+      "targets": [ { "refId": "A", "expr": "sum(rate(vllm:generation_tokens_total[1m])) / clamp_min(sum(vllm:num_requests_running), 1)", "legendFormat": "tok/s per running request" } ]
+    },
+
+    { "id": 22, "type": "row", "title": "5 · GPU health (explains results worse than the estimate)", "collapsed": false, "gridPos": { "h": 1, "w": 24, "x": 0, "y": 56 }, "panels": [] },
+    {
+      "id": 23, "type": "timeseries", "title": "SM clock",
+      "description": "Should stay near max boost under load. Drops = throttling.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 57 },
+      "fieldConfig": { "defaults": { "unit": "hertz", "custom": { "lineWidth": 2, "fillOpacity": 10 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [ { "refId": "A", "expr": "avg(DCGM_FI_DEV_SM_CLOCK{instance=~\"$instance\"}) * 1000000", "legendFormat": "SM clock" } ]
+    },
+    {
+      "id": 24, "type": "timeseries", "title": "Power",
+      "description": "Pinned at the card's limit while the clock drops = power-throttled.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 7, "w": 8, "x": 8, "y": 57 },
+      "fieldConfig": { "defaults": { "unit": "watt", "custom": { "lineWidth": 2, "fillOpacity": 10 } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [ { "refId": "A", "expr": "sum(DCGM_FI_DEV_POWER_USAGE{instance=~\"$instance\"})", "legendFormat": "power" } ]
+    },
+    {
+      "id": 25, "type": "timeseries", "title": "Temperature",
+      "description": "Above ~85 °C expect clock throttling. Compare early vs late experiments in a long sweep.",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 7, "w": 8, "x": 16, "y": 57 },
+      "fieldConfig": { "defaults": { "unit": "celsius", "custom": { "lineWidth": 2, "fillOpacity": 10 },
+        "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 85 } ] } }, "overrides": [] },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "multi" } },
+      "targets": [ { "refId": "A", "expr": "max(DCGM_FI_DEV_GPU_TEMP{instance=~\"$instance\"})", "legendFormat": "temp" } ]
+    }
+  ]
+}
