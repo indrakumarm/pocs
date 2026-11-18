@@ -1,0 +1,49 @@
+{
+  "image_id": "sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e",
+  "state": {
+    "Status": "exited",
+    "Running": false,
+    "Paused": false,
+    "Restarting": false,
+    "OOMKilled": false,
+    "Dead": false,
+    "Pid": 0,
+    "ExitCode": 0,
+    "Error": "",
+    "StartedAt": "2026-11-16T16:46:29.768866538Z",
+    "FinishedAt": "2026-11-16T17:15:35.04885254Z"
+  },
+  "args": [
+    "serve",
+    "--model",
+    "Qwen/Qwen3-8B",
+    "--host",
+    "0.0.0.0",
+    "--port",
+    "8000",
+    "--tensor-parallel-size",
+    "1",
+    "--dtype",
+    "bfloat16",
+    "--max-model-len",
+    "8192",
+    "--gpu-memory-utilization",
+    "0.90",
+    "--enable-prefix-caching"
+  ],
+  "device_requests": [
+    {
+      "Driver": "",
+      "Count": 0,
+      "DeviceIDs": [
+        "0"
+      ],
+      "Capabilities": [
+        [
+          "gpu"
+        ]
+      ],
+      "Options": {}
+    }
+  ]
+}

@@ -1,0 +1,53 @@
+{
+  "image_id": "sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e",
+  "state": {
+    "Status": "created",
+    "Running": false,
+    "Paused": false,
+    "Restarting": false,
+    "OOMKilled": false,
+    "Dead": false,
+    "Pid": 0,
+    "ExitCode": 128,
+    "Error": "failed to set up container networking: driver failed programming external connectivity on endpoint week6-20261118T063444Z-5a23ce-two-rr-0 (4ab54fedf813acaaa16df134703abaa84a70e7152fabd381ade04f1dd385acff): Bind for 0.0.0.0:8000 failed: port is already allocated",
+    "StartedAt": "0001-01-01T00:00:00Z",
+    "FinishedAt": "0001-01-01T00:00:00Z"
+  },
+  "args": [
+    "serve",
+    "--model",
+    "Qwen/Qwen3-8B",
+    "--host",
+    "0.0.0.0",
+    "--port",
+    "8000",
+    "--tensor-parallel-size",
+    "1",
+    "--revision",
+    "b968826d9c46dd6066d109eabc6255188de91218",
+    "--tokenizer-revision",
+    "b968826d9c46dd6066d109eabc6255188de91218",
+    "--dtype",
+    "bfloat16",
+    "--max-model-len",
+    "8192",
+    "--gpu-memory-utilization",
+    "0.90",
+    "--enable-prefix-caching"
+  ],
+  "device_requests": [
+    {
+      "Driver": "",
+      "Count": 0,
+      "DeviceIDs": [
+        "0"
+      ],
+      "Capabilities": [
+        [
+          "gpu"
+        ]
+      ],
+      "Options": {}
+    }
+  ]
+}

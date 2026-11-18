@@ -1,0 +1,70 @@
+model: Qwen/Qwen3-8B
+image: vllm/vllm-openai@sha256:d825baf9ce4b1b6bfc5ecc7b79880c7e6748c65a72d697ce3d47607aafa84c6e
+out: results/week6
+port: 8000
+startup_timeout: 1200
+server_args:
+- --revision
+- b968826d9c46dd6066d109eabc6255188de91218
+- --tokenizer-revision
+- b968826d9c46dd6066d109eabc6255188de91218
+- --dtype
+- bfloat16
+- --max-model-len
+- '8192'
+- --gpu-memory-utilization
+- '0.90'
+- --enable-prefix-caching
+requests: 128
+concurrency:
+- 1
+- 4
+- 16
+- 32
+request_rates:
+- 1
+max_inflight: 128
+seed: 17
+workloads:
+- name: mixed
+  shapes:
+  - input_tokens: 256
+    output_tokens: 128
+    weight: 3
+  - input_tokens: 4096
+    output_tokens: 512
+    weight: 1
+experiments:
+- tag: two-rr
+  replicas:
+  - replica-a
+  - replica-b
+  policy: round-robin
+  servers:
+  - name: replica-a
+    gpus:
+    - 0
+    tensor_parallel_size: 1
+  - name: replica-b
+    gpus:
+    - 1
+    tensor_parallel_size: 1
+- tag: tp2
+  replicas:
+  - replica-a
+  policy: round-robin
+  servers:
+  - name: replica-a
+    gpus:
+    - 0
+    - 1
+    tensor_parallel_size: 2
+- tag: tp1
+  replicas:
+  - replica-a
+  policy: round-robin
+  servers:
+  - name: replica-a
+    gpus:
+    - 0
+    tensor_parallel_size: 1

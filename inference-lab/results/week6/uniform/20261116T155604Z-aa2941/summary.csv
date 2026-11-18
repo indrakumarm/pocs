@@ -1,0 +1,4 @@
+workload,tag,peak_measured_tok_s,concurrency,vs_best_single
+uniform,tp1,262.69702470951785,32,1.0
+uniform,tp2,433.6436082208581,32,1.6507366564214712
+uniform,two-rr,490.28653961428944,32,1.8663574136647834
