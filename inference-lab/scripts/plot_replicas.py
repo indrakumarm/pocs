@@ -1,4 +1,4 @@
-"""Plot a Week 5 result directory, keeping workloads and arrival modes separate."""
+"""Plot a replica/topology result directory, keeping workloads and arrival modes separate."""
 import argparse
 from pathlib import Path
 
@@ -11,7 +11,7 @@ import pandas as pd
 def plot_results(directory):
     paths = sorted(directory.glob("*-closed.csv")) + sorted(directory.glob("*-open.csv"))
     if not paths:
-        raise ValueError(f"No Week 5 benchmark CSVs in {directory}")
+        raise ValueError(f"No benchmark CSVs in {directory}")
     outputs = []
     for path in paths:
         frame = pd.read_csv(path)

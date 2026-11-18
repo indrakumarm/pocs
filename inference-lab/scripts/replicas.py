@@ -33,6 +33,15 @@ def positive(value, name, integer=False):
 def load_config(path):
     with open(path) as source:
         cfg = yaml.safe_load(source)
+    replicas = [Replica(r["name"], os.environ[r["url_env"]]) for r in cfg["replicas"]]
+    if len(replicas) != 2:
+        raise ValueError("Week 5 requires exactly two independent replicas")
+    validate_config(cfg, replicas)
+    return cfg, replicas
+
+
+def validate_config(cfg, replicas):
+    """Validate benchmark settings independently of how servers are started."""
     positive(cfg["requests"], "requests", integer=True)
     positive(cfg["max_inflight"], "max_inflight", integer=True)
     for level in cfg["concurrency"]:
@@ -41,10 +50,7 @@ def load_config(path):
         positive(rate, "request_rates")
     if not cfg["concurrency"] or not cfg["request_rates"]:
         raise ValueError("Provide concurrency and request_rates levels")
-    replicas = [Replica(r["name"], os.environ[r["url_env"]]) for r in cfg["replicas"]]
     Router(replicas)  # Validate names and distinct root URLs before any network calls.
-    if len(replicas) != 2:
-        raise ValueError("Week 5 requires exactly two independent replicas")
     names = {r.name for r in replicas}
     for section in ("workloads", "experiments"):
         key = "name" if section == "workloads" else "tag"
@@ -64,7 +70,6 @@ def load_config(path):
         for shape in workload["shapes"]:
             for key in ("input_tokens", "output_tokens", "weight"):
                 positive(shape[key], key, integer=True)
-    return cfg, replicas
 
 
 def request_shapes(workload, count, seed):
@@ -246,14 +251,14 @@ async def experiment(cfg, all_replicas, exp, workloads, modes, output):
         await runner.cleanup()
 
 
-def summarize(output):
+def summarize(output, baseline_tags=("single-a", "single-b")):
     summary = []
     for path in sorted(output.glob("*-closed.csv")):
         with path.open() as source:
             rows = list(csv.DictReader(source))
         clean = [r for r in rows if int(r["failed"]) == 0 and int(r["client_dropped"]) == 0]
         baseline = max((float(r["agg_tok_s"]) for r in clean
-                        if r["tag"] in ("single-a", "single-b")), default=None)
+                        if r["tag"] in baseline_tags), default=None)
         for tag in dict.fromkeys(r["tag"] for r in rows):
             candidates = [r for r in clean if r["tag"] == tag]
             if not candidates:

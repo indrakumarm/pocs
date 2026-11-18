@@ -44,6 +44,21 @@ test5:
 test-aws:
 	.venv/bin/python -m unittest discover -s tests -p test_aws.py -v
 
+WEEK6_CONFIG ?= weeks/week6/config.yaml
+WEEK6_ARGS ?=
+sweep6:
+	.venv/bin/python scripts/topologies.py $(WEEK6_CONFIG) $(WEEK6_ARGS)
+
+plan6:
+	.venv/bin/python scripts/topologies.py $(WEEK6_CONFIG) $(WEEK6_ARGS) --plan
+
+plot6:
+	@test -n "$(RUN)" || (echo "Usage: make plot6 RUN=results/week6/<run-id>"; exit 1)
+	.venv/bin/python scripts/plot_replicas.py "$(RUN)"
+
+test6:
+	.venv/bin/python -m unittest discover -s tests -p test_week6.py -v
+
 plot:
 	.venv/bin/python scripts/plot.py results/week3.csv
 

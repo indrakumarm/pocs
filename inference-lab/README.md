@@ -199,5 +199,11 @@ least-in-flight routing. This is replica scaling, **not** tensor parallelism.
 Set `REPLICA_A_URL` and `REPLICA_B_URL`, then run `make check5` and `make sweep5`.
 The runner connects to existing servers; it does not provision GPU instances.
 
+[Week 6](weeks/week6/README.md) compares **the same Qwen3-8B model** on one
+two-GPU host: TP=1 baseline, TP=2, and two independent TP=1 replicas. Configure
+the image and GPU indices, validate with `make plan6`, then run `make sweep6`
+on the GPU host and `make plot6 RUN=results/week6/<run-id>`. Topologies run
+sequentially with per-run logs and cleanup; no AWS resources are provisioned.
+
 ## Cost hygiene
 Stop instances when idle. Cache models on a persistent volume. Script everything so each rental starts with `git clone && make setup && make sweep3` (on AWS: `make aws-up`).

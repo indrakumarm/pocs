@@ -10,6 +10,7 @@ How the test tooling works and what each run showed.
 | [sweep.md](sweep.md) | `scripts/sweep.py`: one-knob-per-experiment runner around `bench.py` |
 | [findings/](findings/) | One file per test run: setup, results, interpretation, next steps |
 | [Week 5](../weeks/week5/README.md) | Two-host replica scaling, streaming routing, mixed/fixed-rate load tests, and per-replica evidence |
+| [Week 6](../weeks/week6/README.md) | Same-model TP=1 versus TP=2 versus two replicas on one host; matched workloads, GPU topology and server evidence |
 
 ## Adding a new test set
 1. Run it (`make bench TAG=...` or `make sweepN`).
@@ -24,3 +25,4 @@ How the test tooling works and what each run showed.
 | [week3-sweep-2](findings/week3-sweep-2.md) | sweep.py | First valid sweep. Knee c=16 / ~262 tok/s, matching the estimate within 5%; KV-bound. fp8-kv +39%, prefix caching 4.2× on shared prompts; ITL p99 ~490 ms from prefill stalls; usable at SLO c=4. |
 | [week4](findings/week4.md) | sweep.py | Weight quantization improves per-user decode speed and enlarges KV pool; AWQ reaches 566 tok/s at c=64. SGLang FP8 smooths ITL p99; BF16 SGLang startup failed. Combined FP8-weight/KV tests added. |
 | [week5](findings/week5.md) | replicas.py | Two replicas reached ~526 uniform tok/s at c=64; least-in-flight outperformed round-robin on mixed throughput at c=16/32 in two clean repeats. Tail latency and intermittent disconnects remain concerns. |
+| [week6](findings/week6.md) | topologies.py | A10G topology comparison: uniform favors replicas at c=32; first mixed seed17/reverse run favors TP=2 at c=16/32. Includes methodology, plot walkthrough, KV/preemption evidence, decision guide and remaining repeats. |
