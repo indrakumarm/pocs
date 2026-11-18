@@ -1,0 +1,55 @@
+concurrency:
+- 1
+- 4
+- 16
+- 32
+- 64
+- 128
+experiments:
+- policy: round-robin
+  replicas:
+  - replica-a
+  tag: single-a
+- policy: round-robin
+  replicas:
+  - replica-b
+  tag: single-b
+- policy: round-robin
+  replicas:
+  - replica-a
+  - replica-b
+  tag: two-rr
+- policy: least-inflight
+  replicas:
+  - replica-a
+  - replica-b
+  tag: two-least
+max_inflight: 256
+model: Qwen/Qwen3-8B
+out: results/week5
+replicas:
+- name: replica-a
+  url_env: REPLICA_A_URL
+- name: replica-b
+  url_env: REPLICA_B_URL
+request_rates:
+- 0.5
+- 1
+- 2
+- 4
+requests: 128
+seed: 17
+workloads:
+- name: uniform
+  shapes:
+  - input_tokens: 1024
+    output_tokens: 256
+    weight: 1
+- name: mixed
+  shapes:
+  - input_tokens: 256
+    output_tokens: 128
+    weight: 3
+  - input_tokens: 4096
+    output_tokens: 512
+    weight: 1

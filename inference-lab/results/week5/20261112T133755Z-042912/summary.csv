@@ -1,0 +1,3 @@
+workload,tag,peak_measured_tok_s,concurrency,vs_best_single
+mixed,two-least,251.18441184935716,32,
+mixed,two-rr,237.4119521842153,32,
